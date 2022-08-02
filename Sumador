@@ -1,0 +1,204 @@
+; *****************************************************************************
+; Universidad del Valle de Guatemala
+; IE2023 Programación de microcontroladores
+; Autor: Gabriel Andrade 
+; compilador: PIC-As (v2.36), MPLAB X IDE (v6.00)
+; proyecto: contador de 4 bits
+; hardware: PIC 16F887 
+; creado: 25/07/2022
+; última modificación: 25-07-2022
+;*******************************************************************************
+PROCESSOR 16F887
+#include <xc.inc>
+;*******************************************************************************
+;palabra de configuración
+;*******************************************************************************
+; CONFIG1 
+  CONFIG FOSC = INTRC_NOCLKOUT
+  CONFIG WDTE = OFF
+  CONFIG PWRTE = ON
+  CONFIG MCLRE = OFF
+  CONFIG CP = OFF
+  CONFIG CPD = OFF
+  CONFIG BOREN = OFF
+  CONFIG IESO = OFF
+  CONFIG FCMEN = OFF
+  CONFIG LVP = OFF
+  
+; CONFIG2
+  CONFIG BOR4V = BOR40V
+  CONFIG WRT = OFF
+  
+;*******************************************************************************
+; variables 
+;*******************************************************************************
+PSECT udata_bank0
+ cont1: 
+    DS 2 ;2 BYTES 
+;*******************************************************************************
+; vector reset
+;*******************************************************************************
+PSECT restVect, class=CODE, delta=2, abs
+ ORG 0x0000
+ resetVect:
+    PAGESEL MAIN
+    goto MAIN
+    
+;*******************************************************************************
+; código principal 
+;*******************************************************************************
+PSECT CODE, delta=2, abs
+ ORG 0x0100
+MAIN:
+    CALL clock ; para activar el oscilador 
+    CALL CONFG
+    
+    banksel PORTA
+    banksel PORTB ;puertos del primer contador
+    banksel PORTC
+    banksel PORTD ;puertos del segundo contador
+    
+LOOP:
+    ;primer contador
+    btfsc PORTB, 0 
+    call INCREMENTO 
+    btfsc PORTB, 1
+    call DECREMENTO
+   
+    ;segundo contador
+    btfsc PORTB, 2 
+    call INCREMENTO2
+    btfsc PORTB, 3
+    call DECREMENTO2
+    
+    ;sumador 
+    btfsc PORTB, 4
+    call SUMADOR 
+    
+    goto LOOP ; cierro/inicio de ciclo 
+;*******************************************************************************
+; Códigos auxiliares 
+;*******************************************************************************
+
+clock: ;activador de oscilador del microcontrolador 
+   
+    banksel OSCCON 
+    bsf OSCCON, 6
+    bsf OSCCON, 5
+    bsf OSCCON, 4
+    bsf OSCCON, 2
+    bsf OSCCON, 0
+    RETURN
+    
+CONFG: ;configuración de puertos/pines
+    
+    ; hacer pines digitales 
+    banksel ANSEL 
+    banksel ANSELH
+    clrf ANSEL 
+    clrf ANSELH 
+    
+    ; SE CONFIGURAN TRISC, Y TRISD como salidas
+    
+    banksel TRISA ;salida primer contador
+    banksel TRISD ; salida segundo contador 
+    banksel TRISC ; salida del sumador 
+    clrf TRISA
+    clrf TRISD
+    clrf TRISC ; se limpian para hacerlos salida
+    
+    ; para evitar interferencias se inhabilitan los puertos sin utilizar
+    banksel PORTA
+    banksel PORTB
+    banksel PORTC
+    banksel PORTD
+    clrf PORTA
+    clrf PORTB
+    clrf PORTC
+    clrf PORTD
+    
+    ;configuración de entradas, RB
+    banksel TRISB
+    bsf TRISB, 0 
+    bsf TRISB, 1
+    bsf TRISB, 2
+    bsf TRISB, 3
+    bsf TRISB, 4 
+    
+    RETURN
+
+delay: ; delay para estabilizar la señal del pushbutton 
+    movlw 150
+    movwf cont1
+    decfsz cont1, 1
+    goto $-1 ;regresa a una linea de codigo atras
+    
+    RETURN 
+    
+INCREMENTO: ;prende los leds en funcion de los pushbuttons
+    call delay
+    btfsc PORTB, 0 ; condicional hasta que se haga 1
+    goto $-1 ; lo repite hasta que el boton se presione
+    incf PORTA ; incrementa las pulsasiones en PORTA
+    
+    ;REINICIO AL CAMBIO DE BIT si bit#4 = 1
+    btfsc PORTA, 4 
+    CLRF PORTA
+    RETURN
+    
+DECREMENTO: ;apaga los leds en funcion del pushbutton 
+    call delay
+    btfsc PORTB, 1
+    goto $-1
+    decf PORTA
+    btfsc PORTA, 4
+    call VALORMAX
+    RETURN
+    
+INCREMENTO2: ;prende los leds en funcion de los pushbuttons
+    call delay
+    btfsc PORTB, 2 ; condicional hasta que se haga 1
+    goto $-1 ; lo repite hasta que el boton se presione
+    incf PORTD ; incrementa las pulsasiones en PORTA
+    
+    ;REINICIO AL CAMBIO DE BIT si bit#4 = 1
+    btfsc PORTD, 4 
+    CLRF PORTD
+    RETURN
+    
+DECREMENTO2: ;apaga los leds en funcion del pushbutton 
+    call delay
+    btfsc PORTB, 3
+    goto $-1
+    decf PORTD 
+    btfsc PORTD, 4
+    call VALORMAX2
+    RETURN
+    
+VALORMAX: ; enciende todos los pines
+    clrf PORTA
+    bsf PORTA, 0
+    bsf	PORTA, 1
+    bsf PORTA, 2
+    bsf PORTA, 3
+    RETURN
+VALORMAX2: ; enciende los pines
+    clrf PORTD
+    bsf PORTD, 0
+    bsf	PORTD, 1
+    bsf PORTD, 2
+    bsf PORTD, 3
+    RETURN
+    
+SUMADOR: 
+    call delay 
+    clrf PORTC
+    btfsc PORTB, 4
+    goto $-1
+    
+    movf PORTA, w
+    addwf PORTD, w
+    movwf PORTC
+    
+    RETURN
+END
